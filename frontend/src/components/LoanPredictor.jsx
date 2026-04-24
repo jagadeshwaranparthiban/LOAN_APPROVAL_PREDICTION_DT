@@ -1,20 +1,22 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 const API_URL = "http://localhost:8000";
 
 const defaultForm = {
+  age: "",
   gender: "Male",
-  married: "Yes",
-  dependents: 0,
   education: "Graduate",
-  self_employed: "No",
+  employment_status: "Salaried",
+  employment_years: "",
+  dependents: 0,
   applicant_income: "",
   coapplicant_income: "",
   loan_amount: "",
-  loan_amount_term: 360,
-  credit_history: 1,
-  employment_length: "",
-  age: "",
+  loan_term_months: 360,
+  credit_score: "",
+  existing_emis: 0,
+  monthly_obligations: "",
+  collateral_value: "",
   property_area: "Urban",
 };
 
@@ -156,19 +158,21 @@ export default function LoanPredictor() {
 
     try {
       const payload = {
-        gender: form.gender,
-        married: form.married,
-        dependents: parseInt(form.dependents),
-        education: form.education,
-        self_employed: form.self_employed,
-        applicant_income: parseFloat(form.applicant_income),
-        coapplicant_income: parseFloat(form.coapplicant_income) || 0,
-        loan_amount: parseFloat(form.loan_amount),
-        loan_amount_term: parseFloat(form.loan_amount_term),
-        credit_history: parseInt(form.credit_history),
-        employment_length: parseInt(form.employment_length),
-        age: parseInt(form.age),
-        property_area: form.property_area,
+        age:                  parseInt(form.age),
+        gender:               form.gender,
+        education:            form.education,
+        employment_status:    form.employment_status,
+        employment_years:     parseInt(form.employment_years) || 0,
+        dependents:           parseInt(form.dependents),
+        applicant_income:     parseFloat(form.applicant_income),
+        coapplicant_income:   parseFloat(form.coapplicant_income) || 0,
+        loan_amount:          parseFloat(form.loan_amount),
+        loan_term_months:     parseInt(form.loan_term_months),
+        credit_score:         parseInt(form.credit_score),
+        existing_emis:        parseInt(form.existing_emis),
+        monthly_obligations:  parseFloat(form.monthly_obligations) || 0,
+        collateral_value:     parseFloat(form.collateral_value),
+        property_area:        form.property_area,
       };
 
       const res = await fetch(`${API_URL}/predict`, {
@@ -192,27 +196,29 @@ export default function LoanPredictor() {
     }
   };
 
+  const totalIncome = (parseFloat(form.applicant_income) || 0) + (parseFloat(form.coapplicant_income) || 0);
+  const creditScore = parseInt(form.credit_score) || 0;
+  const dtiRatio = totalIncome > 0
+    ? ((parseFloat(form.monthly_obligations) || 0) + (parseFloat(form.loan_amount) || 0) / parseInt(form.loan_term_months)) / (totalIncome / 12)
+    : 0;
+  const ltv = form.collateral_value > 0
+    ? parseFloat(form.loan_amount) / parseFloat(form.collateral_value)
+    : 0;
+
   const factors = result
     ? [
-        { label: "Credit history", positive: form.credit_history == 1 },
-        { label: "Graduate education", positive: form.education === "Graduate" },
-        { label: "Co-applicant income present", positive: parseFloat(form.coapplicant_income) > 0 },
-        { label: "Not self-employed", positive: form.self_employed === "No" },
-        {
-          label: "Loan-to-income ratio acceptable",
-          positive: parseFloat(form.loan_amount) * 1000 < parseFloat(form.applicant_income) * 3,
-        },
+        { label: "Credit score ≥ 700",              positive: creditScore >= 700 },
+        { label: "DTI ratio ≤ 40%",                 positive: dtiRatio <= 0.4 },
+        { label: "Graduate education",              positive: form.education === "Graduate" },
+        { label: "Co-applicant income present",     positive: parseFloat(form.coapplicant_income) > 0 },
+        { label: "Loan-to-value ratio ≤ 80%",       positive: ltv <= 0.8 },
+        { label: "Stable employment (≥ 2 yrs)",     positive: parseInt(form.employment_years) >= 2 },
       ]
     : [];
-
-  const totalIncome =
-    (parseFloat(form.applicant_income) || 0) +
-    (parseFloat(form.coapplicant_income) || 0);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
-      {/* Google font */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');`}</style>
 
       {/* ── Header ───────────────────────────────────── */}
@@ -232,7 +238,6 @@ export default function LoanPredictor() {
             <p className="text-[10px] text-slate-500 tracking-widest uppercase">Credit Assessment</p>
           </div>
         </div>
-
         <div className="flex items-center gap-2 text-[10px] text-slate-500 border border-slate-800 rounded-full px-3 py-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           Decision Tree · Active
@@ -250,18 +255,30 @@ export default function LoanPredictor() {
             <section>
               <SectionLabel>Personal</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
+                <Input label="Age" name="age" type="number" value={form.age}
+                  onChange={handleChange} placeholder="e.g. 32" min={18} max={70} />
                 <Select label="Gender" name="gender" value={form.gender} onChange={handleChange}
                   options={[{ value: "Male", label: "Male" }, { value: "Female", label: "Female" }]} />
-                <Select label="Marital Status" name="married" value={form.married} onChange={handleChange}
-                  options={[{ value: "Yes", label: "Married" }, { value: "No", label: "Single" }]} />
-                <Input label="Age" name="age" type="number" value={form.age}
-                  onChange={handleChange} placeholder="e.g. 32" min={18} />
-                <Select label="Dependents" name="dependents" value={form.dependents} onChange={handleChange}
-                  options={[0,1,2,3,4,5].map((n) => ({ value: n, label: n === 5 ? "5+" : String(n) }))} />
                 <Select label="Education" name="education" value={form.education} onChange={handleChange}
                   options={[{ value: "Graduate", label: "Graduate" }, { value: "Not Graduate", label: "Not Graduate" }]} />
-                <Select label="Self Employed" name="self_employed" value={form.self_employed} onChange={handleChange}
-                  options={[{ value: "No", label: "No" }, { value: "Yes", label: "Yes" }]} />
+                <Select label="Dependents" name="dependents" value={form.dependents} onChange={handleChange}
+                  options={[0, 1, 2, 3, 4].map((n) => ({ value: n, label: String(n) }))} />
+              </div>
+            </section>
+
+            {/* Employment */}
+            <section>
+              <SectionLabel>Employment</SectionLabel>
+              <div className="grid grid-cols-2 gap-3">
+                <Select label="Employment Status" name="employment_status" value={form.employment_status} onChange={handleChange}
+                  options={[
+                    { value: "Salaried",     label: "Salaried" },
+                    { value: "Self-Employed",label: "Self-Employed" },
+                    { value: "Business",     label: "Business" },
+                    { value: "Unemployed",   label: "Unemployed" },
+                  ]} />
+                <Input label="Employment Years" name="employment_years" type="number"
+                  value={form.employment_years} onChange={handleChange} placeholder="e.g. 6" min={0} />
               </div>
             </section>
 
@@ -270,13 +287,17 @@ export default function LoanPredictor() {
               <SectionLabel>Financial</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Applicant Income (₹)" name="applicant_income" type="number"
-                  value={form.applicant_income} onChange={handleChange} placeholder="e.g. 5500" min={0} />
+                  value={form.applicant_income} onChange={handleChange} placeholder="e.g. 45000" min={0} />
                 <Input label="Co-applicant Income (₹)" name="coapplicant_income" type="number"
-                  value={form.coapplicant_income} onChange={handleChange} placeholder="e.g. 1500" min={0} />
-                <Input label="Employment Length (yrs)" name="employment_length" type="number"
-                  value={form.employment_length} onChange={handleChange} placeholder="e.g. 6" min={0} />
-                <Select label="Credit History" name="credit_history" value={form.credit_history} onChange={handleChange}
-                  options={[{ value: 1, label: "Good (met guidelines)" }, { value: 0, label: "Bad (not met)" }]} />
+                  value={form.coapplicant_income} onChange={handleChange} placeholder="e.g. 15000" min={0} />
+                <Input label="Credit Score" name="credit_score" type="number"
+                  value={form.credit_score} onChange={handleChange} placeholder="300 – 850" min={300} max={850} />
+                <Select label="Existing EMIs" name="existing_emis" value={form.existing_emis} onChange={handleChange}
+                  options={[0, 1, 2, 3, 4].map((n) => ({ value: n, label: String(n) }))} />
+                <Input label="Monthly Obligations (₹)" name="monthly_obligations" type="number"
+                  value={form.monthly_obligations} onChange={handleChange} placeholder="e.g. 5000" min={0} />
+                <Input label="Collateral Value (₹)" name="collateral_value" type="number"
+                  value={form.collateral_value} onChange={handleChange} placeholder="e.g. 250000" min={0} />
               </div>
             </section>
 
@@ -284,16 +305,16 @@ export default function LoanPredictor() {
             <section>
               <SectionLabel>Loan Details</SectionLabel>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Loan Amount (₹000s)" name="loan_amount" type="number"
-                  value={form.loan_amount} onChange={handleChange} placeholder="e.g. 150" min={1} />
-                <Select label="Loan Term" name="loan_amount_term" value={form.loan_amount_term} onChange={handleChange}
-                  options={[12,36,60,84,120,180,240,300,360,480].map((n) => ({ value: n, label: `${n} months` }))} />
+                <Input label="Loan Amount (₹)" name="loan_amount" type="number"
+                  value={form.loan_amount} onChange={handleChange} placeholder="e.g. 200000" min={1} />
+                <Select label="Loan Term" name="loan_term_months" value={form.loan_term_months} onChange={handleChange}
+                  options={[12, 24, 36, 60, 84, 120, 180, 240, 360].map((n) => ({ value: n, label: `${n} months` }))} />
                 <div className="col-span-2">
                   <Select label="Property Area" name="property_area" value={form.property_area} onChange={handleChange}
                     options={[
-                      { value: "Urban", label: "Urban" },
+                      { value: "Urban",     label: "Urban" },
                       { value: "Semiurban", label: "Semiurban" },
-                      { value: "Rural", label: "Rural" },
+                      { value: "Rural",     label: "Rural" },
                     ]} />
                 </div>
               </div>
@@ -361,15 +382,9 @@ export default function LoanPredictor() {
                 <div className={`absolute -top-10 -right-10 w-36 h-36 rounded-full blur-3xl opacity-15 ${
                   result.approved ? "bg-amber-400" : "bg-red-500"
                 }`} />
-                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-1.5">
-                  Loan Decision
-                </p>
-                <p
-                  className={`text-5xl font-bold tracking-tight leading-none ${
-                    result.approved ? "text-amber-400" : "text-red-400"
-                  }`}
-                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-                >
+                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-1.5">Loan Decision</p>
+                <p className={`text-5xl font-bold tracking-tight leading-none ${result.approved ? "text-amber-400" : "text-red-400"}`}
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
                   {result.label}
                 </p>
                 <p className="text-xs text-slate-600 mt-2">
@@ -380,18 +395,15 @@ export default function LoanPredictor() {
 
               {/* Confidence + stats row */}
               <div className="grid grid-cols-5 gap-4">
-                {/* Arc — spans 2 cols */}
                 <div className="col-span-2 rounded-2xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center py-5">
                   <ConfidenceArc value={result.confidence} approved={result.approved} />
                 </div>
-
-                {/* 2×2 stat cards — spans 3 cols */}
                 <div className="col-span-3 grid grid-cols-2 gap-2">
                   {[
-                    { label: "Total Income", value: `₹${totalIncome.toLocaleString("en-IN")}` },
-                    { label: "Loan Amount", value: `₹${(parseFloat(form.loan_amount) * 1000).toLocaleString("en-IN")}` },
-                    { label: "Term", value: `${form.loan_amount_term} months` },
-                    { label: "Property Area", value: form.property_area },
+                    { label: "Total Income",    value: `₹${totalIncome.toLocaleString("en-IN")}` },
+                    { label: "Loan Amount",     value: `₹${parseFloat(form.loan_amount).toLocaleString("en-IN")}` },
+                    { label: "Credit Score",    value: form.credit_score },
+                    { label: "LTV Ratio",       value: `${(ltv * 100).toFixed(1)}%` },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
                       <p className="text-[10px] tracking-widest text-slate-500 uppercase mb-1">{label}</p>
@@ -403,9 +415,7 @@ export default function LoanPredictor() {
 
               {/* Key factors */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-5 py-5">
-                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-1">
-                  Key Factors
-                </p>
+                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-1">Key Factors</p>
                 <div>
                   {factors.map((f) => (
                     <Factor key={f.label} label={f.label} positive={f.positive} />
@@ -415,17 +425,15 @@ export default function LoanPredictor() {
 
               {/* Applicant snapshot */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-5 py-4">
-                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-3">
-                  Applicant Snapshot
-                </p>
+                <p className="text-[10px] tracking-[0.2em] uppercase font-semibold text-slate-500 mb-3">Applicant Snapshot</p>
                 <div className="grid grid-cols-3 gap-x-4 gap-y-3">
                   {[
-                    { label: "Age", value: `${form.age} yrs` },
-                    { label: "Education", value: form.education },
-                    { label: "Dependents", value: form.dependents },
-                    { label: "Marital", value: form.married === "Yes" ? "Married" : "Single" },
-                    { label: "Credit", value: form.credit_history == 1 ? "Good" : "Bad" },
-                    { label: "Employment", value: `${form.employment_length} yrs` },
+                    { label: "Age",         value: `${form.age} yrs` },
+                    { label: "Education",   value: form.education },
+                    { label: "Dependents",  value: form.dependents },
+                    { label: "Employment",  value: form.employment_status },
+                    { label: "Emp. Years",  value: `${form.employment_years} yrs` },
+                    { label: "Existing EMIs", value: form.existing_emis },
                   ].map(({ label, value }) => (
                     <div key={label}>
                       <p className="text-[10px] text-slate-600 mb-0.5">{label}</p>
